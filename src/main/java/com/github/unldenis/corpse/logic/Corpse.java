@@ -150,26 +150,19 @@ public class Corpse {
   private void hideNameTag(@NotNull Player player) {
     // hide nametag to player
     org.bukkit.scoreboard.Scoreboard scoreboard = player.getScoreboard();
-    Team npcs = null;
     for (Team team : scoreboard.getTeams()) {
-      if (team.getName().equals(Corpse.TEAM_NAME)) {
-        npcs = team;
-        break;
+      if (team.getNameTagVisibility() == NameTagVisibility.NEVER) {
+        npcs.addEntry(this.name);
       }
     }
-    if (npcs == null) {
-      npcs = scoreboard.registerNewTeam(Corpse.TEAM_NAME);
-    }
-    npcs.setNameTagVisibility(NameTagVisibility.NEVER);
-    npcs.addEntry(this.name);
   }
 
   private void showNameTag(@NotNull Player player) {
     // show nametag to player
-    player.getScoreboard().getTeams()
-        .stream()
-        .filter(team -> team.getName().equals(Corpse.TEAM_NAME))
-        .forEach(team -> team.removeEntry(this.name));
+    //player.getScoreboard().getTeams()
+        //.stream()
+        //.filter(team -> team.getName().equals(Corpse.TEAM_NAME))
+        //.forEach(team -> team.removeEntry(this.name));
   }
 
   private void sendPackets(Player player, PacketContainer... packets) {
