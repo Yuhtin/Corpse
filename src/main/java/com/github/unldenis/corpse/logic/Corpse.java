@@ -36,162 +36,150 @@ import java.util.concurrent.*;
 
 public class Corpse {
 
-  private static final String TEAM_NAME = "corpse-lib";
-  protected final int id;
-  protected final UUID uuid;
-  protected final String name;
-  protected final Location location;
-  protected final WrappedGameProfile profile;
-  private final Collection<Player> seeingPlayers = new CopyOnWriteArraySet<>();
-  private final PacketLoader packetLoader;
-  private final CorpsePool pool;
-  protected ItemStack[] armorContents;
-  private boolean armor = false;
+    private static final String TEAM_NAME = "corpse-lib";
+    protected final int id;
+    protected final UUID uuid;
+    protected final String name;
+    protected final Location location;
+    protected final WrappedGameProfile profile;
+    private final Collection<Player> seeingPlayers = new CopyOnWriteArraySet<>();
+    private final PacketLoader packetLoader;
+    private final CorpsePool pool;
+    protected ItemStack[] armorContents;
+    private boolean armor = false;
 
-  @ApiStatus.Internal
-  public Corpse(
-      @NotNull Location location,
-      @NotNull WrappedGameProfile wrappedGameProfile,
-      @Nullable ItemStack[] armorContents,
-      @Nullable String name
-  ) {
-    pool = CorpsePool.getInstance();
+    @ApiStatus.Internal
+    public Corpse(
+            @NotNull Location location,
+            @NotNull WrappedGameProfile wrappedGameProfile,
+            @Nullable ItemStack[] armorContents,
+            @Nullable String name
+    ) {
+        pool = CorpsePool.getInstance();
 
-    this.id = pool.getFreeEntityId();
-    this.uuid = new UUID(new Random().nextLong(), 0);
-    this.name = name == null ? ProfileUtils.randomName() : name;
-    this.location = location;
-    this.profile = new WrappedGameProfile(this.uuid, this.name);
-    //set skin to profile WrappedGameProfile
-    wrappedGameProfile.getProperties().get("textures")
-        .forEach(property -> profile.getProperties().put("textures", property));
+        this.id = pool.getFreeEntityId();
+        this.uuid = new UUID(new Random().nextLong(), 0);
+        this.name = name == null ? ProfileUtils.randomName() : name;
+        this.location = location;
+        this.profile = new WrappedGameProfile(this.uuid, this.name);
+        //set skin to profile WrappedGameProfile
+        wrappedGameProfile.getProperties().get("textures")
+                .forEach(property -> profile.getProperties().put("textures", property));
 
-    if (pool.isRenderArmor() && armorContents != null) {
-      this.armorContents = armorContents.clone();
-      this.armor = this.armorContents[0] != null || this.armorContents[1] != null
-          || this.armorContents[2] != null || this.armorContents[3] != null;
-    }
-    //load packets
-    packetLoader = new PacketLoader(this);
-    packetLoader.load();
+        if (pool.isRenderArmor() && armorContents != null) {
+            this.armorContents = armorContents.clone();
+            this.armor = this.armorContents[0] != null || this.armorContents[1] != null
+                    || this.armorContents[2] != null || this.armorContents[3] != null;
+        }
+        //load packets
+        packetLoader = new PacketLoader(this);
+        packetLoader.load();
 
-    //pool take care
-    pool.takeCareOf(this);
+        //pool take care
+        pool.takeCareOf(this);
 
-    //remove eventually corpse after X seconds
-    int time = pool.getTimeRemove();
-    if (time > -1) {
-      Bukkit.getScheduler()
-          .runTaskLaterAsynchronously(CorpseP.getInstance(), () -> pool.remove(this.id),
-              20L * time);
-    }
+        //remove eventually corpse after X seconds
+        int time = pool.getTimeRemove();
+        if (time > -1) {
+            Bukkit.getScheduler()
+                    .runTaskLaterAsynchronously(CorpseP.getInstance(), () -> pool.remove(this.id),
+                            20L * time);
+        }
 
-  }
-
-  public Corpse(@NotNull Player player) {
-    this(player.getLocation(), WrappedGameProfile.fromPlayer(player),
-        player.getInventory().getArmorContents(), player.getName());
-  }
-
-  public Corpse(
-      @NotNull Location location,
-      @NotNull OfflinePlayer offlinePlayer,
-      @Nullable ItemStack[] armorContents
-  ) {
-    this(location, WrappedGameProfile.fromOfflinePlayer(offlinePlayer), armorContents,
-        offlinePlayer.getName());
-  }
-
-  @ApiStatus.Internal
-  public void show(@NotNull Player player) {
-    this.seeingPlayers.add(player);
-
-    if (!this.pool.isShowTags()) {
-      hideNameTag(player);
-    }
-    sendPackets(player,
-        this.packetLoader.getWrapperPlayerInfoAdd().get(),
-        this.packetLoader.getWrapperNamedEntitySpawn().get(),
-        this.packetLoader.getWrapperEntityMetadata().get()); // Set sleep
-
-    if (VersionUtil.isBelow(VersionUtil.VersionEnum.V1_12)) {
-      player.sendBlockChange(BedUtil.getBedLocation(location), Material.valueOf("BED_BLOCK"),
-          (byte) BedUtil.yawToFacing(location.getYaw()));
-      sendPackets(player,
-          this.packetLoader.getWrapperBed().get(),
-          this.packetLoader.getWrapperEntityTeleport()
-              .get());  // Set the correct height of the player lying down
     }
 
-    if (armor) {
-      sendPackets(player, this.packetLoader.getWrapperEntityEquipment().getMore());
+    public Corpse(@NotNull Player player) {
+        this(player.getLocation(), WrappedGameProfile.fromPlayer(player),
+                player.getInventory().getArmorContents(), player.getName());
     }
 
-    Bukkit.getScheduler().runTaskLaterAsynchronously(
-        CorpseP.getInstance(),
-        () -> sendPackets(player, this.packetLoader.getWrapperPlayerInfoRemove().get()),
-        2L);
-
-  }
-
-  @ApiStatus.Internal
-  public void hide(@NotNull Player player) {
-    sendPackets(player, this.packetLoader.getWrapperEntityDestroy().get());
-    if (!this.pool.isShowTags()) {
-      showNameTag(player);
+    public Corpse(
+            @NotNull Location location,
+            @NotNull OfflinePlayer offlinePlayer,
+            @Nullable ItemStack[] armorContents
+    ) {
+        this(location, WrappedGameProfile.fromOfflinePlayer(offlinePlayer), armorContents,
+                offlinePlayer.getName());
     }
-    this.seeingPlayers.remove(player);
-  }
 
-  public boolean isShownFor(@NotNull Player player) {
-    return this.seeingPlayers.contains(player);
-  }
+    @ApiStatus.Internal
+    public void show(@NotNull Player player) {
+        this.seeingPlayers.add(player);
 
-  private void hideNameTag(@NotNull Player player) {
-    // hide nametag to player
-    org.bukkit.scoreboard.Scoreboard scoreboard = player.getScoreboard();
-    for (Team team : scoreboard.getTeams()) {
-      if (team.getNameTagVisibility() == NameTagVisibility.NEVER) {
-        npcs.addEntry(this.name);
-      }
+        if (!this.pool.isShowTags()) {
+            hideNameTag(player);
+        }
+        sendPackets(player,
+                this.packetLoader.getWrapperPlayerInfoAdd().get(),
+                this.packetLoader.getWrapperNamedEntitySpawn().get(),
+                this.packetLoader.getWrapperEntityMetadata().get()); // Set sleep
+
+        if (VersionUtil.isBelow(VersionUtil.VersionEnum.V1_12)) {
+            player.sendBlockChange(BedUtil.getBedLocation(location), Material.valueOf("BED_BLOCK"),
+                    (byte) BedUtil.yawToFacing(location.getYaw()));
+            sendPackets(player,
+                    this.packetLoader.getWrapperBed().get(),
+                    this.packetLoader.getWrapperEntityTeleport()
+                            .get());  // Set the correct height of the player lying down
+        }
+
+        if (armor) {
+            sendPackets(player, this.packetLoader.getWrapperEntityEquipment().getMore());
+        }
+
+        Bukkit.getScheduler().runTaskLaterAsynchronously(
+                CorpseP.getInstance(),
+                () -> sendPackets(player, this.packetLoader.getWrapperPlayerInfoRemove().get()),
+                2L);
+
     }
-  }
 
-  private void showNameTag(@NotNull Player player) {
-    // show nametag to player
-    //player.getScoreboard().getTeams()
-        //.stream()
-        //.filter(team -> team.getName().equals(Corpse.TEAM_NAME))
-        //.forEach(team -> team.removeEntry(this.name));
-  }
-
-  private void sendPackets(Player player, PacketContainer... packets) {
-    for (PacketContainer packet : packets) {
-      try {
-        ProtocolLibrary.getProtocolManager().sendServerPacket(player, packet);
-      } catch (InvocationTargetException e) {
-        e.printStackTrace();
-      }
+    @ApiStatus.Internal
+    public void hide(@NotNull Player player) {
+        sendPackets(player, this.packetLoader.getWrapperEntityDestroy().get());
+        this.seeingPlayers.remove(player);
     }
-  }
 
-  public int getId() {
-    return id;
-  }
+    public boolean isShownFor(@NotNull Player player) {
+        return this.seeingPlayers.contains(player);
+    }
 
-  @NotNull
-  public String getName() {
-    return name;
-  }
+    private void hideNameTag(@NotNull Player player) {
+        org.bukkit.scoreboard.Scoreboard scoreboard = player.getScoreboard();
+        for (Team team : scoreboard.getTeams()) {
+            if (team.getNameTagVisibility() == NameTagVisibility.NEVER) {
+                team.addEntry(this.name);
+            }
+        }
+    }
 
-  @NotNull
-  public Location getLocation() {
-    return location;
-  }
+    private void sendPackets(Player player, PacketContainer... packets) {
+        for (PacketContainer packet : packets) {
+            try {
+                ProtocolLibrary.getProtocolManager().sendServerPacket(player, packet);
+            } catch (InvocationTargetException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
-  @NotNull
-  public Collection<Player> getSeeingPlayers() {
-    return Collections.unmodifiableCollection(this.seeingPlayers);
-  }
+    public int getId() {
+        return id;
+    }
+
+    @NotNull
+    public String getName() {
+        return name;
+    }
+
+    @NotNull
+    public Location getLocation() {
+        return location;
+    }
+
+    @NotNull
+    public Collection<Player> getSeeingPlayers() {
+        return Collections.unmodifiableCollection(this.seeingPlayers);
+    }
 
 }
